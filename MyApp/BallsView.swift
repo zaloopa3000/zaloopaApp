@@ -1,16 +1,11 @@
 import SwiftUI
 
-/// Экран со светящимися шарами.
+/// Экран с разноцветными шарами.
 struct BallsView: View {
     @State private var simulation = BallSimulation()
 
     var body: some View {
         Canvas { context, _ in
-            // Лёгкое общее размытие делает края шаров ещё мягче.
-            context.addFilter(.blur(radius: 1.5))
-            // Аддитивное смешивание: там, где шары рядом, свечение складывается.
-            context.blendMode = .plusLighter
-
             for ball in simulation.balls {
                 draw(ball, in: &context)
             }
@@ -37,37 +32,48 @@ struct BallsView: View {
         .ignoresSafeArea()
     }
 
-    /// Рисует один шар: светлая сердцевина → насыщенный цвет → прозрачный ореол.
+    /// Рисует шар: многоцветный градиент, мягкий блик для объёма и тонкую белую обводку.
     private func draw(_ ball: Ball, in context: inout GraphicsContext) {
-        // Ореол выходит за пределы «тела» шара, чтобы край растворялся.
-        let glowRadius = ball.radius * 1.6
         let rect = CGRect(
-            x: ball.position.x - glowRadius,
-            y: ball.position.y - glowRadius,
-            width: glowRadius * 2,
-            height: glowRadius * 2
+            x: ball.position.x - ball.radius,
+            y: ball.position.y - ball.radius,
+            width: ball.radius * 2,
+            height: ball.radius * 2
+        )
+        let circle = Path(ellipseIn: rect)
+
+        // Градиент идёт через весь шар под индивидуальным углом.
+        let dx = cos(ball.gradientAngle.radians) * ball.radius
+        let dy = sin(ball.gradientAngle.radians) * ball.radius
+        context.fill(
+            circle,
+            with: .linearGradient(
+                Gradient(colors: ball.colors),
+                startPoint: CGPoint(x: ball.position.x - dx, y: ball.position.y - dy),
+                endPoint: CGPoint(x: ball.position.x + dx, y: ball.position.y + dy)
+            )
         )
 
-        let core = Color(hue: ball.hue, saturation: 0.15, brightness: 1.0)
-        let body = Color(hue: ball.hue, saturation: 0.55, brightness: 0.95)
-
-        // Доля радиуса ореола, где заканчивается «тело» шара.
-        let edge = ball.radius / glowRadius
-        let gradient = Gradient(stops: [
-            .init(color: core.opacity(0.95), location: 0),
-            .init(color: body.opacity(0.85), location: edge * 0.55),
-            .init(color: body.opacity(0.45), location: edge),
-            .init(color: body.opacity(0.0), location: 1)
-        ])
-
+        // Мягкий блик сверху слева, плавно растворяющийся к краям.
+        let highlightCenter = CGPoint(
+            x: ball.position.x - ball.radius * 0.35,
+            y: ball.position.y - ball.radius * 0.35
+        )
         context.fill(
-            Path(ellipseIn: rect),
+            circle,
             with: .radialGradient(
-                gradient,
-                center: ball.position,
+                Gradient(colors: [.white.opacity(0.35), .white.opacity(0)]),
+                center: highlightCenter,
                 startRadius: 0,
-                endRadius: glowRadius
+                endRadius: ball.radius * 1.1
             )
+        )
+
+        // Тонкая полупрозрачная белая обводка по границе шара.
+        context.stroke(
+            circle,
+            with: .color(.white.opacity(0.15)),
+            lineWidth: 1
         )
     }
 }
