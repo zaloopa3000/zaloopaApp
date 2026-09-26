@@ -101,13 +101,18 @@ struct AnimatedGIFView: View {
     let gif: AnimatedGIF
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            Image(decorative: gif.frame(at: timeline.date.timeIntervalSinceReferenceDate), scale: 1)
-                .resizable()
-                .scaledToFill()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
+        // Прозрачная подложка занимает ровно предложенный размер, а гифка заполняет её поверх.
+        // Если применить scaledToFill к самой картинке без подложки, она раздувает рамку блока
+        // до своих пропорций и вылезает за его пределы.
+        Color.clear
+            .overlay {
+                TimelineView(.animation) { timeline in
+                    Image(decorative: gif.frame(at: timeline.date.timeIntervalSinceReferenceDate), scale: 1)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+            .clipped()
     }
 }
 

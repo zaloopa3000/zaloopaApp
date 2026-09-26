@@ -43,14 +43,23 @@ nonisolated enum GiphyClient {
     private static let rating = "g"
     /// Максимальный размер кадра в пикселях: хватает для блока на экране и экономит память.
     private static let maxPixelSize = 720
+    /// Тема гифок. Случайная гифка берётся из результатов поиска: у эндпоинта `/random`
+    /// параметр `tag` фильтрует слабо, и туда попадают гифки не по теме.
+    private static let searchQuery = "anime"
+    /// Сколько результатов поиска доступно по ключу (GIPHY отдаёт позиции 0…499).
+    private static let searchResultLimit = 500
 
-    /// Загружает случайную гифку и раскладывает её на кадры. Работает вне главного потока.
+    /// Загружает случайную аниме-гифку и раскладывает её на кадры. Работает вне главного потока.
     @concurrent
     static func fetchRandomGIF() async throws -> AnimatedGIF {
-        var components = URLComponents(string: "https://api.giphy.com/v1/gifs/random")
+        var components = URLComponents(string: "https://api.giphy.com/v1/gifs/search")
         components?.queryItems = [
             URLQueryItem(name: "api_key", value: apiKey),
-            URLQueryItem(name: "rating", value: rating)
+            URLQueryItem(name: "q", value: searchQuery),
+            URLQueryItem(name: "rating", value: rating),
+            URLQueryItem(name: "limit", value: "1"),
+            // Случайная позиция в выдаче поиска — это и есть «случайная гифка по теме».
+            URLQueryItem(name: "offset", value: String(Int.random(in: 0..<searchResultLimit)))
         ]
         guard let requestURL = components?.url else { throw GiphyError.noImage }
 
@@ -59,9 +68,12 @@ nonisolated enum GiphyClient {
 
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let images = try decoder.decode(RandomResponse.self, from: json).data.images
-        // «downsized» — облегчённая версия до 2 МБ: хорошее качество без долгой загрузки.
-        guard let gifURL = images.downsized?.url ?? images.fixedHeight?.url ?? images.original?.url else {
+        guard let images = try decoder.decode(SearchResponse.self, from: json).data.first?.images else {
+            throw GiphyError.noImage
+        }
+        // «downsized_medium» (до 5 МБ) обычно совпадает с оригиналом по разрешению, а «downsized»
+        // (до 2 МБ) бывает сильно уменьшен и на блоке выглядит мыльно — берём его только как запасной.
+        guard let gifURL = images.downsizedMedium?.url ?? images.downsized?.url ?? images.fixedHeight?.url else {
             throw GiphyError.noImage
         }
 
@@ -114,8 +126,8 @@ nonisolated enum GiphyClient {
 
     // MARK: - Ответ GIPHY
 
-    private struct RandomResponse: Decodable {
-        let data: GIFObject
+    private struct SearchResponse: Decodable {
+        let data: [GIFObject]
     }
 
     private struct GIFObject: Decodable {
@@ -123,9 +135,9 @@ nonisolated enum GiphyClient {
     }
 
     private struct Images: Decodable {
+        let downsizedMedium: Rendition?
         let downsized: Rendition?
         let fixedHeight: Rendition?
-        let original: Rendition?
     }
 
     private struct Rendition: Decodable {

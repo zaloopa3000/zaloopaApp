@@ -9,16 +9,18 @@ import UIKit
 /// о стены почти непрерывно, и без ограничения вибрация сливалась бы в сплошное «гудение».
 final class ImpactHaptics {
     /// Скорость удара о стену (pt/с), начиная с которой чувствуется отклик.
-    let thresholdSpeed: CGFloat = 500
+    /// Совпадает с порогом вспышек: при обычном наклоне телефона удары в основном 150–500 pt/с.
+    let thresholdSpeed: CGFloat = 150
     /// Скорость удара, при которой отклик максимальный.
-    let fullIntensitySpeed: CGFloat = 1500
+    let fullIntensitySpeed: CGFloat = 900
     /// Минимальный интервал между откликами в секундах (не больше 4 раз в секунду).
     let minimumInterval: TimeInterval = 0.25
 
     private var lastFeedbackDate: Date?
 
     #if os(iOS)
-    private let generator = UIImpactFeedbackGenerator(style: .soft)
+    /// `.medium` отчётливо ощущается даже на слабых ударах (у `.soft` отклик почти незаметен).
+    private let generator = UIImpactFeedbackGenerator(style: .medium)
     #endif
 
     /// Держит тактильный движок «разогретым», чтобы отклик не запаздывал.
@@ -34,9 +36,9 @@ final class ImpactHaptics {
         if let lastFeedbackDate, date.timeIntervalSince(lastFeedbackDate) < minimumInterval { return }
         lastFeedbackDate = date
 
-        // Слабые удары дают лёгкий отклик, сильные — отчётливый, но всё равно мягкий.
+        // Слабые удары дают лёгкий, но ощутимый отклик, сильные — полный.
         let progress = min(1, (speed - thresholdSpeed) / (fullIntensitySpeed - thresholdSpeed))
-        let intensity = 0.35 + 0.65 * progress
+        let intensity = 0.55 + 0.45 * progress
         #if os(iOS)
         generator.impactOccurred(intensity: intensity)
         generator.prepare()
